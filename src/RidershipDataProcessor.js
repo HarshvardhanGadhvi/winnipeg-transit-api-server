@@ -1,61 +1,51 @@
-// src/RidershipDataProcessor.js
-import BaseProcessor from './BaseProcessor.js';
+import sqlite3 from 'sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Get the resource ID from the environment variable (as defined in your .env)
-const RIDERSHIP_RESOURCE_ID = process.env.RIDERSHIP_RESOURCE_ID; 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DB_PATH = path.join(__dirname, '../transit_data.db');
 
-export default class RidershipDataProcessor extends BaseProcessor {
+export default class RidershipDataProcessor {
     constructor() {
-        super();
+        this.db = new sqlite3.Database(DB_PATH, sqlite3.OPEN_READONLY);
     }
 
-    getSeason(dateString) {
-        const date = new Date(dateString);
-        const month = date.getMonth() + 1; // 1-12
-        if (month >= 3 && month <= 5) return 'Spring';
-        if (month >= 6 && month <= 8) return 'Summer';
-        if (month >= 9 && month <= 11) return 'Autumn';
-        return 'Winter';
+    query(sql, params = []) {
+        return new Promise((resolve, reject) => {
+            this.db.all(sql, params, (err, rows) => {
+                if (err) reject(err);
+                else resolve(rows);
+            });
+        });
     }
 
     async getSeasonalRidershipSummary() {
-        if (!RIDERSHIP_RESOURCE_ID) throw new Error("RIDERSHIP_RESOURCE_ID is missing in .env.");
+        console.log("⚡ Querying Local Ridership...");
+        
+        // Much simpler query now: Group by the actual Season Name!
+        const sql = `
+            SELECT 
+                season_name as season_label,
+                service_date,
+                SUM(average_boardings) as total_boardings,
+                SUM(average_alightings) as total_alightings,
+                COUNT(*) as records_count
+            FROM ridership_records
+            GROUP BY season_name
+            ORDER BY service_date ASC
+        `;
 
-        const rawData = await this.fetchOpenData(RIDERSHIP_RESOURCE_ID, 50000); 
+        const rows = await this.query(sql);
 
-        const seasonalSummary = new Map();
-
-        rawData.forEach(record => {
-            // FIX: Use the specific Socrata field names confirmed for ridership data:
-            const boardings = parseInt(record.estimated_boardings, 10) || 0; // Assuming 'estimated_boardings'
-            const alightings = parseInt(record.estimated_alightings, 10) || 0; // Assuming 'estimated_alightings'
-            const serviceDate = record.service_date; 
-            
-            if (!serviceDate) return;
-            const season = this.getSeason(serviceDate);
-
-            if (!seasonalSummary.has(season)) {
-                seasonalSummary.set(season, { 
-                    totalDays: 0,
-                    totalBoardings: 0,
-                    totalAlightings: 0
-                });
-            }
-            
-            const seasonStats = seasonalSummary.get(season);
-            seasonStats.totalDays++;
-            seasonStats.totalBoardings += boardings;
-            seasonStats.totalAlightings += alightings;
-        });
-
-        const summaryArray = Array.from(seasonalSummary, ([season, stats]) => ({
-            season: season,
-            average_daily_boardings: parseFloat((stats.totalBoardings / stats.totalDays).toFixed(2)),
-            average_daily_alightings: parseFloat((stats.totalAlightings / stats.totalDays).toFixed(2)),
-            average_daily_total: parseFloat(((stats.totalBoardings + stats.totalAlightings) / stats.totalDays).toFixed(2)),
-            days_analyzed: stats.totalDays
+        const summary = rows.map(r => ({
+            season: r.season_label, // e.g. "Winter 2024"
+            // Divide total boardings by approx days in season or just show raw volume?
+            // The dataset is "Average Daily Activity", so summing it gives "Systemwide Daily Average"
+            average_daily_boardings: Math.round(r.total_boardings),
+            average_daily_alightings: Math.round(r.total_alightings)
         }));
 
-        return { ridership_by_season: summaryArray };
+        return { ridership_by_season: summary };
     }
 }
