@@ -1,0 +1,12 @@
+# Dependencies
+/node_modules
+
+# Environment variables (CRUCIAL SECURITY: DO NOT UPLOAD API KEYS)
+.env
+
+# Logs and Debug
+*.log
+npm-debug.log*
+
+# Build artifacts (not strictly needed for Node, but good practice)
+/dist
