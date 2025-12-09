@@ -1,9 +1,7 @@
-// server.js
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OTP_DataProcessor from './src/OTP_DataProcessor.js';
-// ... import other processors
 
 dotenv.config();
 const app = express();
@@ -14,7 +12,7 @@ app.use(express.json());
 
 const otpProcessor = new OTP_DataProcessor(); 
 
-// --- ENDPOINT 1: Main Dashboard (Summary) ---
+// --- ENDPOINT 1: Main Dashboard ---
 app.get('/api/v1/otp-summary', async (req, res) => {
     try {
         const data = await otpProcessor.getRouteSummary();
@@ -24,7 +22,7 @@ app.get('/api/v1/otp-summary', async (req, res) => {
     }
 });
 
-// --- ENDPOINT 2: System Trend Chart (NEW) ---
+// --- ENDPOINT 2: System Trend Chart ---
 app.get('/api/v1/otp/system-history', async (req, res) => {
     try {
         const data = await otpProcessor.getSystemHistory();
@@ -34,7 +32,7 @@ app.get('/api/v1/otp/system-history', async (req, res) => {
     }
 });
 
-// --- ENDPOINT 3: Single Route Chart (NEW) ---
+// --- ENDPOINT 3: Single Route Chart ---
 app.get('/api/v1/otp/route/:id', async (req, res) => {
     try {
         const data = await otpProcessor.getSingleRouteHistory(req.params.id);
@@ -43,24 +41,24 @@ app.get('/api/v1/otp/route/:id', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// --- ENDPOINT 4: Map Data (THE FIX IS HERE) ---
 app.get('/api/v1/otp/map', async (req, res) => {
     try {
-        const data = await otpProcessor.getStopMapData();
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-// --- ENDPOINT 4: Map Data (Supports filtering) ---
-app.get('/api/v1/otp/map', async (req, res) => {
-    try {
-        // Read the 'route' parameter from the URL (e.g., /api/v1/otp/map?route=11)
+        // 1. Get the route parameter from the URL (e.g. ?route=11)
         const routeId = req.query.route || null;
-        
+
+        // 2. Log it so we know it worked
+        console.log(`📡 API Request: Get Map for Route "${routeId || 'ALL'}"`);
+
+        // 3. Pass it to the processor (This was missing before!)
         const data = await otpProcessor.getStopMapData(routeId);
+        
         res.json(data);
     } catch (error) {
+        console.error("API Error:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
+
 app.listen(PORT, () => console.log(`🚀 API running on http://localhost:${PORT}`));

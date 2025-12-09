@@ -8,29 +8,26 @@ const DB_PATH = path.join(__dirname, '../transit_data.db');
 
 const db = new sqlite3.Database(DB_PATH);
 
-console.log("⚡ Optimizing Database Performance...");
-console.log("   (This might take 1-2 minutes for 4.5M records. Do not interrupt.)");
+console.log("⚡ Optimizing Database for Speed...");
 
 db.serialize(() => {
-    // 1. Memory Tuning
-    db.run("PRAGMA journal_mode = WAL;"); // Better concurrency
-    db.run("PRAGMA synchronous = NORMAL;"); // Faster writes
-    db.run("PRAGMA cache_size = -200000;"); // Use ~200MB RAM for cache
+    // 1. Index for filtering by Date (Huge speedup for your WHERE clause)
+    db.run(`CREATE INDEX IF NOT EXISTS idx_otp_date ON otp_records(scheduled_time)`);
 
-    // 2. Create Indices (The Magic Speed Boost)
-    console.log("... Indexing OTP Records (Route + Date)...");
-    db.run("CREATE INDEX IF NOT EXISTS idx_otp_route_date ON otp_records(route_number, scheduled_time);");
+    // 2. Index for filtering by Route (Huge speedup for Single Route view)
+    db.run(`CREATE INDEX IF NOT EXISTS idx_otp_route ON otp_records(route_number)`);
+
+    // 3. Index for the JOIN (Speedup for connecting Stops to Records)
+    db.run(`CREATE INDEX IF NOT EXISTS idx_otp_stop ON otp_records(stop_number)`);
     
-    console.log("... Indexing OTP Records (Date Only)...");
-    db.run("CREATE INDEX IF NOT EXISTS idx_otp_date ON otp_records(scheduled_time);");
+    // 4. Index for the Stop Lookups
+    db.run(`CREATE INDEX IF NOT EXISTS idx_stops_id ON transit_stops(stop_number)`);
 
-    console.log("... Indexing Passups...");
-    db.run("CREATE INDEX IF NOT EXISTS idx_passup_time ON passup_records(time);");
-
-    // 3. Vacuum (Defrag)
-    console.log("... Vacuuming database (Reclaiming space)...");
-    db.run("VACUUM;", (err) => {
-        if (err) console.error("❌ Error:", err.message);
-        else console.log("✅ Optimization Complete! Your database is now racing tuned.");
+    console.log("✅ Indexes Created.");
+    
+    // 5. Run Analyze to let SQLite know about the new structure
+    db.run("ANALYZE;", () => {
+        console.log("🚀 Database Optimized! Restart your server.");
+        db.close();
     });
 });
