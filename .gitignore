@@ -10,3 +10,4 @@ npm-debug.log*
 
 # Build artifacts (not strictly needed for Node, but good practice)
 /dist
+transit_data.db
