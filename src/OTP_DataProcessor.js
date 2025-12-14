@@ -110,21 +110,23 @@ export default class OTP_DataProcessor extends BaseProcessor {
         };
     }
 
-    // --- 2. SYSTEM HISTORY CHART ---
-    async getSystemHistory() {
-        console.log("🔍 Fetching System History...");
+    // --- 2. SYSTEM HISTORY CHART (Dynamic Range) ---
+    async getSystemHistory(lookbackDays = 30) {
+        console.log(`🔍 Fetching System History (Last ${lookbackDays} days)...`);
+        
         const sql = `
             SELECT 
                 strftime('%Y-%m-%d', scheduled_time) as date,
                 COUNT(*) as total,
                 SUM(CASE WHEN deviation >= ? AND deviation <= ? THEN 1 ELSE 0 END) as on_time
             FROM otp_records
-            WHERE scheduled_time >= '2025-07-29'
+            WHERE scheduled_time >= DATE('now', '-' || ? || ' days')
             GROUP BY date
             ORDER BY date ASC
         `;
         
-        const rows = await this.query(sql, [this.EARLY_THRESHOLD, this.LATE_THRESHOLD]);
+        // Pass parameters: Early, Late, Days
+        const rows = await this.query(sql, [this.EARLY_THRESHOLD, this.LATE_THRESHOLD, lookbackDays]);
         
         return rows.map(r => ({
             date: r.date,
@@ -132,9 +134,9 @@ export default class OTP_DataProcessor extends BaseProcessor {
         }));
     }
 
-    // --- 3. SINGLE ROUTE CHART & STATS ---
-    async getSingleRouteHistory(routeId) {
-        console.log(`🔍 Fetching History & Stats for Route ${routeId}...`);
+    // --- 3. SINGLE ROUTE CHART & STATS (Dynamic Range) ---
+    async getSingleRouteHistory(routeId, lookbackDays = 30) {
+        console.log(`🔍 Fetching History for Route ${routeId} (Last ${lookbackDays} days)...`);
         
         const sql = `
             SELECT 
@@ -142,12 +144,17 @@ export default class OTP_DataProcessor extends BaseProcessor {
                 COUNT(*) as total,
                 SUM(CASE WHEN deviation >= ? AND deviation <= ? THEN 1 ELSE 0 END) as on_time
             FROM otp_records
-            WHERE route_number = ? AND scheduled_time >= '2025-07-29'
+            WHERE route_number = ? 
+              AND scheduled_time >= DATE('now', '-' || ? || ' days')
             GROUP BY date
             ORDER BY date ASC
         `;
         
-        const rows = await this.query(sql, [this.EARLY_THRESHOLD, this.LATE_THRESHOLD, routeId]);
+        const rows = await this.query(sql, [this.EARLY_THRESHOLD, this.LATE_THRESHOLD, routeId, lookbackDays]);
+        
+        // Re-calculate stats for this specific window if needed, 
+        // or just keep using the default 30-day trend helper. 
+        // For speed, we'll keep the standard trend helper distinct.
         const routeStats = await this.getTrends(routeId);
 
         return {
