@@ -58,14 +58,14 @@ export default class OTP_DataProcessor extends BaseProcessor {
         }
     }
 
-    // --- 1. DASHBOARD SUMMARY ---
+   // --- 1. DASHBOARD SUMMARY ---
     async getRouteSummary() {
         console.log("⚡ Fetching Route Summary...");
         
-        // Fix: Use CAST to ensure route numbers match between tables
         const sql = `
             SELECT 
                 O.route_number,
+                R.route_name,  -- [NEW] Fetch the name!
                 R.color,
                 R.text_color,
                 COUNT(*) as total,
@@ -80,19 +80,18 @@ export default class OTP_DataProcessor extends BaseProcessor {
 
         const routeSummary = rows.map(r => ({
             route_number: r.route_number,
+            route_name: r.route_name, // [NEW] Pass it to frontend
             // Fallback colors if DB is empty
-            color: (r.color && r.color.startsWith('#')) ? r.color : '#64748b', 
+            color: (r.color && r.color.startsWith('#')) ? r.color : '#334155', 
             text_color: r.text_color || '#ffffff',
             total_trips: r.total,
             otp_percentage: parseFloat(((r.on_time / r.total) * 100).toFixed(1))
         })).sort((a, b) => parseInt(a.route_number) - parseInt(b.route_number));
 
-        // Calculate Overall System Stats
+        // ... rest of the function (totals, trends) remains the same ...
         const total = routeSummary.reduce((sum, r) => sum + r.total_trips, 0);
         const onTimeWeighted = routeSummary.reduce((sum, r) => sum + (r.otp_percentage * r.total_trips / 100), 0);
         const overall = total > 0 ? (onTimeWeighted / total) * 100 : 0;
-
-        // Get Trends
         const trends = await this.getTrends(null);
 
         return { 

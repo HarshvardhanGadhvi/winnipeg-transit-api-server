@@ -20,7 +20,50 @@ export default class PassupDataProcessor {
         });
     }
 
-    // 1. Existing Monthly Summary
+    // --- HELPER: Trend Calculation (Last 30 Days vs Prior 30 Days) ---
+    async getTrends() {
+        const sql = `
+            SELECT 
+                'current' as period,
+                COUNT(*) as total,
+                SUM(CASE WHEN pass_up_type LIKE '%Full%' THEN 1 ELSE 0 END) as full_bus,
+                SUM(CASE WHEN pass_up_type LIKE '%Wheelchair%' THEN 1 ELSE 0 END) as wheelchair
+            FROM passup_records
+            WHERE time >= DATE('now', '-30 days')
+            
+            UNION ALL
+            
+            SELECT 
+                'previous' as period,
+                COUNT(*) as total,
+                SUM(CASE WHEN pass_up_type LIKE '%Full%' THEN 1 ELSE 0 END) as full_bus,
+                SUM(CASE WHEN pass_up_type LIKE '%Wheelchair%' THEN 1 ELSE 0 END) as wheelchair
+            FROM passup_records
+            WHERE time >= DATE('now', '-60 days') 
+              AND time < DATE('now', '-30 days')
+        `;
+
+        const rows = await this.query(sql);
+        
+        const curr = rows.find(r => r.period === 'current') || { total: 0, full_bus: 0, wheelchair: 0 };
+        const prev = rows.find(r => r.period === 'previous') || { total: 0, full_bus: 0, wheelchair: 0 };
+
+        // Helper to calculate percentage change
+        const calcChange = (c, p) => {
+            if (p === 0) return c > 0 ? 100 : 0; // If prev was 0, change is 100% or 0%
+            return ((c - p) / p) * 100;
+        };
+
+        return {
+            total_change: calcChange(curr.total, prev.total),
+            full_bus_change: calcChange(curr.full_bus, prev.full_bus),
+            wheelchair_change: calcChange(curr.wheelchair, prev.wheelchair),
+            // We also return the actual "Last 30 Days" counts if you want to show those instead of All-Time
+            recent_counts: curr 
+        };
+    }
+
+    // --- 1. Monthly Summary (Updated with Trends) ---
     async getMonthlyPassupSummary() {
         const sql = `
             SELECT 
@@ -29,14 +72,23 @@ export default class PassupDataProcessor {
                 SUM(CASE WHEN pass_up_type LIKE '%Full%' THEN 1 ELSE 0 END) as full_bus_total,
                 SUM(CASE WHEN pass_up_type LIKE '%Wheelchair%' THEN 1 ELSE 0 END) as wheelchair_total
             FROM passup_records
-            WHERE time >= '2025-06-29'
+            WHERE time >= '2024-01-01' -- Ensure we get enough history
             GROUP BY month
             ORDER BY month ASC
         `;
-        return { passups_by_month: await this.query(sql) };
+
+        const [monthlyData, trends] = await Promise.all([
+            this.query(sql),
+            this.getTrends()
+        ]);
+
+        return { 
+            passups_by_month: monthlyData,
+            trends: trends 
+        };
     }
 
-    // 2. [NEW] Get Route Rankings (Top 10 Routes)
+    // --- 2. Top Routes ---
     async getPassupsByRoute() {
         const sql = `
             SELECT 
@@ -44,7 +96,7 @@ export default class PassupDataProcessor {
                 route_destination,
                 COUNT(*) as count
             FROM passup_records
-            WHERE time >= '2025-06-29'
+            WHERE time >= '2024-01-01'
             GROUP BY route_number
             ORDER BY count DESC
             LIMIT 10
@@ -52,12 +104,8 @@ export default class PassupDataProcessor {
         return await this.query(sql);
     }
 
-    // 3. [FIXED] Get Geospatial Data for Heatmap
+    // --- 3. Heatmap Data ---
     async getPassupHeatmap() {
-        console.log("⚡ Fetching Heatmap Data...");
-        // Extracted from GeoJSON: {"type":"Point","coordinates":[-97.15..., 49.82...]}
-        // Note: SQLite json_extract index starts at 0. 
-        // Index 0 = Longitude, Index 1 = Latitude
         const sql = `
             SELECT 
                 json_extract(location, '$.coordinates[1]') as lat,
@@ -65,7 +113,7 @@ export default class PassupDataProcessor {
                 pass_up_type
             FROM passup_records
             WHERE location IS NOT NULL
-            AND time >= '2025-06-29'
+            AND time >= '2024-01-01'
             LIMIT 5000 
         `;
         return await this.query(sql);
