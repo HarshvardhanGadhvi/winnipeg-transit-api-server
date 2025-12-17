@@ -13,3 +13,4 @@ npm-debug.log*
 transit_data.db
 .env
 bfg-1.15.0.jar
+passwords.txt
