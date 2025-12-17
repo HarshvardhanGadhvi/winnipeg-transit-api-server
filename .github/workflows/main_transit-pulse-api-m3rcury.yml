@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js version
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '24.x'
 
@@ -62,4 +62,5 @@ jobs:
           app-name: 'transit-pulse-api-m3rcury'
           slot-name: 'Production'
           package: .
+
           
