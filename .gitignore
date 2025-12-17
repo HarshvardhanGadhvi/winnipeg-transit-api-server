@@ -12,3 +12,4 @@ npm-debug.log*
 /dist
 transit_data.db
 .env
+bfg-1.15.0.jar

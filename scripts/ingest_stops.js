@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 const DB_PATH = path.join(__dirname, '../transit_data.db');
 
 // 🔑 YOU MUST GET AN API KEY FROM: https://api.winnipegtransit.com/
-const API_KEY = "***REMOVED***"; 
+const API_KEY = import.meta.env.API_KEY; 
 const BASE_URL = "https://api.winnipegtransit.com/v4";
 
 const db = new sqlite3.Database(DB_PATH);
