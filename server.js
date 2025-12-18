@@ -56,18 +56,42 @@ app.get('/api/v1/otp/system-history', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
-// --- ENDPOINT 3: Single Route Chart ---
+const singleRouteCache = {}; 
+const ROUTE_CACHE_DURATION = 1000 * 60 * 60; // 1 Hour
+// --- ENDPOINT 3: Single Route History ---
+//Added caching for individual route data
 app.get('/api/v1/otp/route/:id', async (req, res) => {
     try {
+        const routeId = req.params.id;
         const days = req.query.days || 30;
-        const data = await otpProcessor.getSingleRouteHistory(req.params.id, days);
+
+        // 2. Create a unique "Key" for this specific request
+        // We must combine RouteID AND Days (e.g., "11_30" or "BLUE_60")
+        const cacheKey = `${routeId}_${days}`;
+        const now = Date.now();
+
+        // 3. Check if THIS specific key exists and is fresh
+        if (singleRouteCache[cacheKey] && (now - singleRouteCache[cacheKey].timestamp < ROUTE_CACHE_DURATION)) {
+            console.log(`⚡ HIT: Serving Route ${routeId} from Cache`);
+            return res.json(singleRouteCache[cacheKey].data);
+        }
+
+        console.log(`🐢 MISS: Calculating data for Route ${routeId}...`);
+        
+        // 4. If missing, do the work
+        const data = await otpProcessor.getSingleRouteHistory(routeId, days);
+
+        // 5. Save it to the bookshelf
+        singleRouteCache[cacheKey] = {
+            data: data,
+            timestamp: now
+        };
+
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
-
 // --- ENDPOINT 4: Map Data (OTP) ---
 app.get('/api/v1/otp/map', async (req, res) => {
     try {
