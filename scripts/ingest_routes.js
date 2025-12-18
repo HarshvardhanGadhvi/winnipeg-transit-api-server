@@ -3,13 +3,13 @@ import sqlite3 from 'sqlite3';
 import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
+import dotenv from 'dotenv';
+dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_PATH = path.join(__dirname, '../transit_data.db');
 
-// 🔑 PASTE YOUR API KEY HERE
-const API_KEY = import.meta.env.API_KEY; 
+const API_KEY = process.env.API_KEY; 
 const BASE_URL = "https://api.winnipegtransit.com/v4/routes.json";
 
 const db = new sqlite3.Database(DB_PATH);
