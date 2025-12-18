@@ -28,12 +28,14 @@ export default class OTP_DataProcessor {
         return new Date().toISOString().split('T')[0];
     }
 
-    // --- TRENDS (Simplified & Fixed Date Logic) ---
+   // --- TRENDS (Fixed Type Matching & NaN Safety) ---
     async getTrends(routeId = null) {
-        // Anchor to the current date when trends are requested
+        // Anchor to the current date
         const anchorDate = await this.getCurrentAnchorDate();
         
-        // [FIX] Using the current date as the anchor for the BETWEEN clause
+        // [FIX 1] Use CAST to ensure "22" (String) matches 22 (Integer)
+        const routeFilter = routeId ? 'AND CAST(route_number AS TEXT) = CAST(? AS TEXT)' : '';
+        
         const sql = `
             SELECT 
                 'current' as period,
@@ -42,7 +44,7 @@ export default class OTP_DataProcessor {
                 SUM(CASE WHEN deviation >= ${this.EARLY_THRESHOLD} AND deviation <= ${this.LATE_THRESHOLD} THEN 1 ELSE 0 END) as on_time_count
             FROM otp_records
             WHERE scheduled_time BETWEEN DATETIME(?, '-30 days') AND DATETIME(?)
-            ${routeId ? 'AND route_number = ?' : ''}
+            ${routeFilter}
             
             UNION ALL
             
@@ -53,35 +55,42 @@ export default class OTP_DataProcessor {
                 SUM(CASE WHEN deviation >= ${this.EARLY_THRESHOLD} AND deviation <= ${this.LATE_THRESHOLD} THEN 1 ELSE 0 END) as on_time_count
             FROM otp_records
             WHERE scheduled_time BETWEEN DATETIME(?, '-60 days') AND DATETIME(?, '-30 days')
-            ${routeId ? 'AND route_number = ?' : ''}
+            ${routeFilter}
         `;
 
+        // Create parameters array based on whether routeId exists
         const params = routeId 
             ? [anchorDate, anchorDate, routeId, anchorDate, anchorDate, routeId] 
             : [anchorDate, anchorDate, anchorDate, anchorDate];
 
         try {
             const rows = await this.query(sql, params);
+            
+            // Safety Defaults (Handle missing rows)
             const curr = rows.find(r => r.period === 'current') || { total_trips: 0, on_time_count: 0, avg_deviation: 0 };
             const prev = rows.find(r => r.period === 'previous') || { total_trips: 0, on_time_count: 0, avg_deviation: 0 };
 
+            // [FIX 2] Math with Safety Checks
             const currOTP = curr.total_trips > 0 ? (curr.on_time_count / curr.total_trips) * 100 : 0;
             const prevOTP = prev.total_trips > 0 ? (prev.on_time_count / prev.total_trips) * 100 : 0;
-            const currDev = (curr.avg_deviation || 0) / 60;
-            const prevDev = (prev.avg_deviation || 0) / 60;
+            
+            // Handle null deviation (if no trips existed)
+            const currDev = (curr.avg_deviation !== null) ? (curr.avg_deviation / 60) : 0;
+            const prevDev = (prev.avg_deviation !== null) ? (prev.avg_deviation / 60) : 0;
 
             return {
-                otp_diff: parseFloat((currOTP - prevOTP).toFixed(1)),
-                trip_diff: curr.total_trips - prev.total_trips,
-                deviation_diff: parseFloat((currDev - prevDev).toFixed(1)),
-                current_avg_deviation: parseFloat(currDev.toFixed(1))
+                // The || 0 ensures that if anything is NaN, it becomes 0
+                otp_diff: parseFloat((currOTP - prevOTP).toFixed(1)) || 0,
+                trip_diff: (curr.total_trips || 0) - (prev.total_trips || 0),
+                deviation_diff: parseFloat((currDev - prevDev).toFixed(1)) || 0,
+                current_avg_deviation: parseFloat(currDev.toFixed(1)) || 0
             };
         } catch (e) {
             console.error("Trend Error:", e);
+            // Return safe zeros on error
             return { otp_diff: 0, trip_diff: 0, deviation_diff: 0, current_avg_deviation: 0 };
         }
     }
-
     // --- 1. DASHBOARD SUMMARY ---
     async getRouteSummary() {
         console.log("⚡ Fetching Route Summary...");
