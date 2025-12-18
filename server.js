@@ -148,4 +148,15 @@ app.get('/api/v1/ridership/map', async (req, res) => {
     }
 });
 
-app.listen(PORT,'0.0.0.0', () => console.log(`🚀 API running on http://localhost:${PORT}`));
+// Start the server
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 API running on http://localhost:${PORT}`);
+    
+    // BACKGROUND WARM-UP
+    console.log("🔥 Warming up cache in background...");
+    otpProcessor.getRouteSummary().then(data => {
+        otpCache.data = data;
+        otpCache.lastUpdated = Date.now();
+        console.log("✅ Cache Warmed! First user will get instant data.");
+    });
+});
