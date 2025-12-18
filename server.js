@@ -17,34 +17,46 @@ const passupProcessor = new PassupDataProcessor(); // [NEW] Initialize Passup Pr
 const ridershipProcessor = new RidershipDataProcessor();
 let otpCache = {
     data: null,
+    promise: null, // New: Stores the active calculation
     lastUpdated: 0
 };
-const CACHE_DURATION = 1000 * 60 * 60; // Cache for 1 Hour
+const CACHE_DURATION = 1000 * 60 * 60; // 1 Hour
+const getOtpSummary = () => {
+    const now = Date.now();
+
+    // 1. If we have fresh data, return it immediately
+    if (otpCache.data && (now - otpCache.lastUpdated < CACHE_DURATION)) {
+        return Promise.resolve(otpCache.data);
+    }
+
+    // 2. If a calculation is ALREADY running, join it! (Don't start a new one)
+    if (otpCache.promise) {
+        console.log("✋ Joining existing calculation...");
+        return otpCache.promise;
+    }
+
+    // 3. Otherwise, start the work
+    console.log("🐢 Starting new calculation...");
+    otpCache.promise = otpProcessor.getRouteSummary().then(data => {
+        otpCache.data = data;
+        otpCache.lastUpdated = Date.now();
+        otpCache.promise = null; // Clear the promise when done
+        console.log("✅ Calculation finished & Cached.");
+        return data;
+    });
+
+    return otpCache.promise;
+};
 // --- ENDPOINT 1: Main Dashboard (OTP) ---
 app.get('/api/v1/otp-summary', async (req, res) => {
     try {
-        const now = Date.now();
-
-        // Check if cache exists and is less than 1 hour old
-        if (otpCache.data && (now - otpCache.lastUpdated < CACHE_DURATION)) {
-            console.log("⚡ Serving OTP Summary from Cache");
-            return res.json(otpCache.data);
-        }
-
-        console.log("🐢 Cache expired or empty. Calculating fresh data...");
-        // If no cache, fetch from database (The slow part)
-        const data = await otpProcessor.getRouteSummary();
-
-        // Update the cache
-        otpCache.data = data;
-        otpCache.lastUpdated = now;
-
+        // Use the helper to ensure we never run twice
+        const data = await getOtpSummary();
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
-
 // --- ENDPOINT 2: System Trend Chart ---
 app.get('/api/v1/otp/system-history', async (req, res) => {
     try {
@@ -176,11 +188,7 @@ app.get('/api/v1/ridership/map', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 API running on http://localhost:${PORT}`);
     
-    // BACKGROUND WARM-UP
+    // BACKGROUND WARM-UP (Now uses the same smart function)
     console.log("🔥 Warming up cache in background...");
-    otpProcessor.getRouteSummary().then(data => {
-        otpCache.data = data;
-        otpCache.lastUpdated = Date.now();
-        console.log("✅ Cache Warmed! First user will get instant data.");
-    });
+    getOtpSummary(); // This starts the promise that Endpoint 1 will wait for
 });
