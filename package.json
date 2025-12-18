@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "vite --host", 
-  "build": "vite build",
-  "preview": "vite preview"
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "keywords": [],
   "author": "",
@@ -20,5 +20,11 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.49.2",
+    "svelte": "^5.46.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
   }
 }
