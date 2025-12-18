@@ -15,10 +15,30 @@ app.use(express.json());
 const otpProcessor = new OTP_DataProcessor(); 
 const passupProcessor = new PassupDataProcessor(); // [NEW] Initialize Passup Processor
 const ridershipProcessor = new RidershipDataProcessor();
+let otpCache = {
+    data: null,
+    lastUpdated: 0
+};
+const CACHE_DURATION = 1000 * 60 * 60; // Cache for 1 Hour
 // --- ENDPOINT 1: Main Dashboard (OTP) ---
 app.get('/api/v1/otp-summary', async (req, res) => {
     try {
+        const now = Date.now();
+
+        // Check if cache exists and is less than 1 hour old
+        if (otpCache.data && (now - otpCache.lastUpdated < CACHE_DURATION)) {
+            console.log("⚡ Serving OTP Summary from Cache");
+            return res.json(otpCache.data);
+        }
+
+        console.log("🐢 Cache expired or empty. Calculating fresh data...");
+        // If no cache, fetch from database (The slow part)
         const data = await otpProcessor.getRouteSummary();
+
+        // Update the cache
+        otpCache.data = data;
+        otpCache.lastUpdated = now;
+
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: error.message });
